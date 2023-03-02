@@ -23,7 +23,7 @@ import {
   sinon,
 }           from 'tstest'
 
-import * as PUPPET from 'wechaty-puppet'
+import * as PUPPET from 'wechaty-puppet-lab'
 
 import {
   PuppetWeChat,

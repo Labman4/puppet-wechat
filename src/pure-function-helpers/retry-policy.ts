@@ -4,7 +4,7 @@ import {
 }                 from 'cockatiel'
 import {
   log,
-}                 from 'wechaty-puppet'
+}                 from 'wechaty-puppet-lab'
 
 function getRetryPolicy (): RetryPolicy {
   const policy = Policy

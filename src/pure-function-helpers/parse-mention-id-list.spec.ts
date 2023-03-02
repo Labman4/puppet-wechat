@@ -20,7 +20,7 @@
  */
 
 import { test } from 'tstest'
-import type { Puppet } from 'wechaty-puppet'
+import type { Puppet } from 'wechaty-puppet-lab'
 
 import { parseMentionIdList } from './parse-mention-id-list.js'
 

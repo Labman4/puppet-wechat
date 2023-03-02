@@ -16,32 +16,27 @@
  *   limitations under the License.
  *
  */
+import axios from 'axios'
 import { EventEmitter } from 'events'
-import fs               from 'fs'
-import path             from 'path'
-import puppeteer        from 'puppeteer'
-import puppeteerExtra   from 'puppeteer-extra'
-import stealthPlugin    from 'puppeteer-extra-plugin-stealth'
 import { StateSwitch }  from 'state-switch'
-import { parseString }  from 'xml2js'
-
+import { XMLParser } from 'fast-xml-parser'
 import {
   wrapAsyncError,
   GError,
 }                       from 'gerror'
 import type {
   MemoryCard,
-}                         from 'memory-card'
+}                         from 'memory-card-lab'
 import {
   log,
-}                         from 'wechaty-puppet'
+}                         from 'wechaty-puppet-lab'
 
 import {
   MEMORY_SLOT,
 }                       from './config.js'
-import {
-  codeRoot,
-}                       from './cjs.js'
+// import {
+//   codeRoot,
+// }                       from './cjs.js'
 
 import type {
   WebContactRawPayload,
@@ -54,7 +49,7 @@ import {
   unescapeHtml,
   retryPolicy,
 }                       from './pure-function-helpers/mod.js'
-
+import puppeteer from 'puppeteer'
 export interface InjectResult {
   code:    number,
   message: string,
@@ -130,10 +125,6 @@ export class Bridge extends EventEmitter {
     const launchOptions     = { ...this.options.launchOptions } as puppeteer.LaunchOptions & puppeteer.BrowserLaunchArgumentOptions
     const headless          = !(this.options.head)
     const launchOptionsArgs = launchOptions.args || []
-    if (this.options.endpoint) {
-      launchOptions.executablePath = this.options.endpoint
-    }
-
     const options = {
       ...launchOptions,
       args: [
@@ -145,6 +136,7 @@ export class Bridge extends EventEmitter {
         '--disable-sync',
         '--hide-scrollbars',
         '--mute-audio',
+        '--no-first-run',
         '--no-sandbox',
         ...launchOptionsArgs,
       ],
@@ -155,18 +147,25 @@ export class Bridge extends EventEmitter {
 
     let browser
 
-    if (!this.options.stealthless) {
-      /**
-        * Puppeteer 4.0
-        *   https://github.com/berstend/puppeteer-extra/issues/211#issuecomment-636283110
-        */
-      const plugin = stealthPlugin()
-      plugin.onBrowser = () => {}
-      puppeteerExtra.use(plugin)
-      browser = await puppeteerExtra.launch(options)
-    } else {
-      browser = await puppeteer.launch(options)
-    }
+    // if (!this.options.stealthless) {
+    //   /**
+    //     * Puppeteer 4.0
+    //     *   https://github.com/berstend/puppeteer-extra/issues/211#issuecomment-636283110
+    //     */
+    //   const plugin = stealthPlugin()
+    //   plugin.onBrowser = () => {}
+    //   puppeteerExtra.use(plugin)
+    //   browser = await puppeteerExtra.launch(options)
+    // } else {
+      if (this.options.endpoint) {
+        const connectoptions = {
+          browserWSEndpoint: this.options.endpoint
+        }
+        browser = await puppeteer.connect(connectoptions);
+      } else {
+        browser = await puppeteer.launch(options)
+      }
+    // }
 
     const version = await browser.version()
     log.verbose('PuppetWeChatBridge', 'initBrowser() version: %s', version)
@@ -239,7 +238,7 @@ export class Bridge extends EventEmitter {
     }
     page.on('error',  e => this.emit('error', e))
     page.on('dialog', this.wrapAsync(this.onDialog.bind(this)))
-
+    log.verbose("memorycard:", this.options.memory)
     const cookieList = (
       await this.options.memory.get(MEMORY_SLOT)
     ) || [] as puppeteer.Protocol.Network.Cookie[]
@@ -285,7 +284,7 @@ export class Bridge extends EventEmitter {
     }
     // add RequestInterception
     await page.setRequestInterception(true)
-    page.on('request', (req) => {
+    page.on('request', (req: any) => {
       const url = new URL(req.url())
       if (url.pathname === '/cgi-bin/mmwebwx-bin/webwxnewloginpage') {
         const override = {
@@ -327,44 +326,50 @@ export class Bridge extends EventEmitter {
   public async inject (page: puppeteer.Page): Promise<void> {
     log.verbose('PuppetWeChatBridge', 'inject()')
 
-    const WECHATY_BRO_JS_FILE = path.join(
-      codeRoot,
-      'src',
-      'wechaty-bro.js',
-    )
+    // const WECHATY_BRO_JS_FILE = path.join(
+    //   codeRoot,
+    //   'src',
+    //   'wechaty-bro.js',
+    // )
 
     try {
-      const sourceCode = fs.readFileSync(WECHATY_BRO_JS_FILE)
-        .toString()
-
-      let retObj = await page.evaluate(sourceCode) as undefined | InjectResult
-
-      if (retObj && /^(2|3)/.test(retObj.code.toString())) {
-        // HTTP Code 2XX & 3XX
-        log.silly('PuppetWeChatBridge', 'inject() eval(Wechaty) return code[%d] message[%s]',
-          retObj.code, retObj.message)
-      } else {  // HTTP Code 4XX & 5XX
-        throw new Error('execute injectio error: ' + retObj?.code + ', ' + retObj?.message)
+      const op = {
+        baseURL: "https://raw.githubusercontent.com",
+        url: "/wechaty/puppet-wechat/main/src/wechaty-bro.js",
+        method: "GET",
       }
+      log.verbose('Access wechaty-bro', 'wait for')
 
-      retObj = await this.proxyWechaty('init')
-      if (retObj && /^(2|3)/.test(retObj.code.toString())) {
-        // HTTP Code 2XX & 3XX
-        log.silly('PuppetWeChatBridge', 'inject() Wechaty.init() return code[%d] message[%s]',
-          retObj.code, retObj.message)
-      } else {  // HTTP Code 4XX & 5XX
-        throw new Error('execute proxyWechaty(init) error: ' + retObj?.code + ', ' + retObj?.message)
-      }
-
-      const SUCCESS_CIPHER = 'ding() OK!'
-      const future = new Promise(resolve => this.once('dong', resolve))
-      this.ding(SUCCESS_CIPHER)
-      const r = await future
-      if (r !== SUCCESS_CIPHER) {
-        throw new Error('fail to get right return from call ding()')
-      }
-      log.silly('PuppetWeChatBridge', 'inject() ding success')
-
+       axios(op).then(async (data) => {
+        log.silly('PuppetWeChatBridge', 'fetchcode:',data.data)
+        const sourceCode = data.data;
+        let retObj = await page.evaluate(sourceCode) as undefined | InjectResult
+        if (retObj && /^(2|3)/.test(retObj.code.toString())) {
+          // HTTP Code 2XX & 3XX
+          log.silly('PuppetWeChatBridge', 'inject() eval(Wechaty) return code[%d] message[%s]',
+            retObj.code, retObj.message)
+        } else {  // HTTP Code 4XX & 5XX
+          throw new Error('execute injectio error: ' + retObj?.code + ', ' + retObj?.message)
+        }
+  
+        retObj = await this.proxyWechaty('init')
+        if (retObj && /^(2|3)/.test(retObj.code.toString())) {
+          // HTTP Code 2XX & 3XX
+          log.silly('PuppetWeChatBridge', 'inject() Wechaty.init() return code[%d] message[%s]',
+            retObj.code, retObj.message)
+        } else {  // HTTP Code 4XX & 5XX
+          throw new Error('execute proxyWechaty(init) error: ' + retObj?.code + ', ' + retObj?.message)
+        }
+  
+        const SUCCESS_CIPHER = 'ding() OK!'
+        const future = new Promise(resolve => this.once('dong', resolve))
+        this.ding(SUCCESS_CIPHER)
+        const r = await future
+        if (r !== SUCCESS_CIPHER) {
+          throw new Error('fail to get right return from call ding()')
+        }
+        log.silly('PuppetWeChatBridge', 'inject() ding success')
+      })
     } catch (e) {
       log.verbose('PuppetWeChatBridge', 'inject() exception: %s. stack: %s', (e as Error).message, (e as Error).stack)
       throw e
@@ -866,14 +871,8 @@ export class Bridge extends EventEmitter {
       // see unit test for detail
       const tryXmlText = this.preHtmlToXml(text)
       // obj = JSON.parse(toJson(tryXmlText))
-      obj = await new Promise((resolve, reject) => {
-        parseString(tryXmlText, { explicitArray: false }, (err: any, result) => {
-          if (err) {
-            return reject(err)
-          }
-          return resolve(result)
-        })
-      })
+      const parser = new XMLParser();
+      obj = parser.parse(tryXmlText); 
     } catch (e) {
       log.warn('PuppetWeChatBridge', 'testBlockedMessage() toJson() exception: %s', e as Error)
       return false
@@ -977,7 +976,7 @@ export class Bridge extends EventEmitter {
       // const [button] = await listXpath(page, XPATH_SELECTOR)
       const [button] = await page.$x(XPATH_SELECTOR)
       if (button) {
-        await button.click()
+        await (button as puppeteer.ElementHandle<HTMLElement> ).click()
         log.silly('PuppetWeChatBridge', 'clickSwitchAccount() clicked!')
         return true
 

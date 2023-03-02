@@ -4,7 +4,7 @@ import {
   WebMessageType,
 }                         from '../web-schemas.js'
 
-import * as PUPPET from 'wechaty-puppet'
+import * as PUPPET from 'wechaty-puppet-lab'
 
 export function webMessageType (
   rawPayload: WebMessageRawPayload,

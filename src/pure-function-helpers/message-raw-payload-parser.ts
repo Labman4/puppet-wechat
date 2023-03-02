@@ -1,4 +1,4 @@
-import type * as PUPPET from 'wechaty-puppet'
+import type * as PUPPET from 'wechaty-puppet-lab'
 
 import type {
   WebMessageRawPayload,

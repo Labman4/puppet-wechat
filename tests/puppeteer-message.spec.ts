@@ -27,7 +27,7 @@ import {
   log,
 }                 from '../src/config.js'
 
-import * as PUPPET from 'wechaty-puppet'
+import * as PUPPET from 'wechaty-puppet-lab'
 
 import {
   PuppetWeChat,

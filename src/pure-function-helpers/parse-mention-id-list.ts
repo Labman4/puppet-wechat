@@ -5,7 +5,7 @@
 import {
   log,
   Puppet,
-}             from 'wechaty-puppet'
+}             from 'wechaty-puppet-lab'
 
 /**
  * mobile: \u2005

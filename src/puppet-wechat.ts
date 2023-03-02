@@ -16,12 +16,12 @@
  *   limitations under the License.
  *
  */
-import path    from 'path'
+import path    from 'path-browserify'
 import nodeUrl from 'url'
 
 import md5        from 'md5'
 import mime       from 'mime'
-import request    from 'request'
+import axios      from 'axios'
 import type {
   LaunchOptions,
 }                 from 'puppeteer'
@@ -33,10 +33,10 @@ import {
   Watchdog,
   WatchdogFood,
 }                           from 'watchdog'
-import * as PUPPET          from 'wechaty-puppet'
-import { log }              from 'wechaty-puppet'
-import type { FileBoxInterface } from 'file-box'
-import { FileBox }          from 'file-box'
+import * as PUPPET          from 'wechaty-puppet-lab'
+import { log }              from 'wechaty-puppet-lab'
+import type { FileBoxInterface } from 'file-box-lab'
+import { FileBox }          from 'file-box-lab'
 
 import {
   MEMORY_SLOT,
@@ -1298,7 +1298,6 @@ export class PuppetWeChat extends PUPPET.Puppet {
     }
 
     log.silly('PuppetWeChat', 'uploadMedia() headers:%s', JSON.stringify(headers))
-
     const uploadMediaRequest = {
       AESKey:        '',
       BaseRequest:   baseRequest,
@@ -1313,7 +1312,6 @@ export class PuppetWeChat extends PUPPET.Puppet {
       TotalLen:      size,
       UploadType:    2,
     }
-
     const checkData = {
       BaseRequest:  baseRequest,
       FileMd5:      fileMd5,
@@ -1323,7 +1321,6 @@ export class PuppetWeChat extends PUPPET.Puppet {
       FromUserName: fromUserName,
       ToUserName:   toUserName,
     }
-
     const mediaData = {
       FileMd5:    fileMd5,
       FileName:   filename,
@@ -1337,61 +1334,24 @@ export class PuppetWeChat extends PUPPET.Puppet {
     // https://github.com/Chatie/webwx-app-tracker/blob/
     //  7c59d35c6ea0cff38426a4c5c912a086c4c512b2/formatted/webwxApp.js#L1132 #1182
     if (size > LARGE_FILE_SIZE) {
-      let ret
-      try {
-        ret = await new Promise<any>((resolve, reject) => {
-          const r = {
-            headers,
-            json: checkData,
+        let ret: { AESKey: string; Signature: string | undefined };
+          const option = {
+            method: 'post',
+            headers: headers,
+            data: checkData,
             url: `https://${hostname}${checkUploadUrl}`,
-          }
-          request.post(r, (err, _ /* res */, body) => {
-            try {
-              if (err) {
-                reject(err)
-              } else {
-                let obj = body
-                if (typeof body !== 'object') {
-                  log.silly('PuppetWeChat', 'updateMedia() typeof body = %s', typeof body)
-                  try {
-                    obj = JSON.parse(body)
-                  } catch (e) {
-                    log.error('PuppetWeChat', 'updateMedia() body = %s', body)
-                    log.error('PuppetWeChat', 'updateMedia() exception: %s', e as Error)
-                    this.emit('error', e)
-                  }
-                }
-                if (typeof obj !== 'object' || obj.BaseResponse.Ret !== 0) {
-                  const errMsg = obj.BaseResponse || 'api return err'
-                  log.silly('PuppetWeChat', 'uploadMedia() checkUpload err:%s \nreq:%s\nret:%s',
-                    JSON.stringify(errMsg), JSON.stringify(r), body)
-                  reject(new Error('chackUpload err:' + JSON.stringify(errMsg)))
-                }
-                resolve({
-                  AESKey    : obj.AESKey,
-                  Signature : obj.Signature,
-                })
-              }
-            } catch (e) {
-              reject(e)
-            }
-          })
-        })
-      } catch (e) {
-        log.error('PuppetWeChat', 'uploadMedia() checkUpload exception: %s', (e as Error).message)
-        throw e
-      }
-      if (!ret.Signature) {
-        log.error('PuppetWeChat', 'uploadMedia(): chackUpload failed to get Signature')
-        throw new Error('chackUpload failed to get Signature')
-      }
-      uploadMediaRequest.Signature = ret.Signature
-      uploadMediaRequest.AESKey    = ret.AESKey
-      mediaData.Signature          = ret.Signature
+          }   
+          axios(option).then(function (response) {
+            ret.AESKey = response.data.AESKey 
+            uploadMediaRequest.Signature = response.data.Signature 
+            uploadMediaRequest.AESKey    = ret.AESKey
+            mediaData.Signature          = ret.Signature
+          })         
     } else {
       delete (uploadMediaRequest as any).Signature
       delete (uploadMediaRequest as any).AESKey
     }
+ 
 
     log.verbose('PuppetWeChat', 'uploadMedia() webwx_data_ticket: %s', webwxDataTicket)
     log.verbose('PuppetWeChat', 'uploadMedia() pass_ticket: %s', passTicket)
@@ -1406,7 +1366,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
     const BASE_LENGTH = 512 * 1024
     const chunks = Math.ceil(buffer.length / BASE_LENGTH)
 
-    const bufferData = []
+    const bufferData: Buffer[] = []
     for (let i = 0; i < chunks; i++) {
       const tempBuffer = buffer.slice(i * BASE_LENGTH, (i + 1) * BASE_LENGTH)
       bufferData.push(tempBuffer)
@@ -1434,32 +1394,17 @@ export class PuppetWeChat extends PUPPET.Puppet {
         uploadmediarequest: JSON.stringify(uploadMediaRequest),
         webwx_data_ticket: webwxDataTicket,
       }
-      try {
-        return await new Promise<string>((resolve, reject) => {
-          try {
-            request.post({
-              formData,
-              headers,
-              url: uploadMediaUrl + '?f=json',
-            }, (err, _, body) => {
-              if (err) {
-                reject(err)
-              } else {
-                let obj = body
-                if (typeof body !== 'object') {
-                  obj = JSON.parse(body)
-                }
-                resolve(obj.MediaId || '')
-              }
-            })
-          } catch (e) {
-            reject(e)
-          }
-        })
-      } catch (e) {
-        log.error('PuppetWeChat', 'uploadMedia() uploadMedia exception: %s', (e as Error).message)
-        throw new Error('uploadMedia err: ' + (e as any).message)
-      }
+      const option = {
+        method: 'post',
+        headers: headers,
+        data: formData,
+        url: uploadMediaUrl + '?f=json',
+      }   
+      let mediaId = ''
+      axios(option).then(function (response) {
+        mediaId = response.data.mediaId;
+      })  
+      return mediaId
     }
     let mediaId = ''
     for (let i = 0; i < bufferData.length; i++) {
@@ -1472,7 +1417,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
     return Object.assign(mediaData, { MediaId: mediaId })
   }
 
-  override async messageSendFile (
+  override async messageSendFile(
     conversationId : string,
     file           : FileBoxInterface,
   ): Promise<void> {
@@ -1580,7 +1525,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
     return PUPPET.throwUnsupportedError(contactId, phoneList)
   }
 
-  override conversationReadMark (
+  override async conversationReadMark (
     conversationId: string,
     hasRead = true,
   ) : Promise<void> {

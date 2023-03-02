@@ -17,8 +17,8 @@
  *   limitations under the License.
  *
  */
-import fs    from 'fs'
-import path  from 'path'
+import { fs }    from 'memfs-lab'
+import path      from 'path-browserify'
 
 import {
   test,

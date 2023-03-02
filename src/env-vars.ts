@@ -1,4 +1,4 @@
-import { log } from 'wechaty-puppet'
+import { log } from 'wechaty-puppet-lab'
 
 function WECHATY_PUPPET_WECHAT_PUPPETEER_HEAD (value?: boolean): boolean {
   if (typeof value !== 'undefined') {

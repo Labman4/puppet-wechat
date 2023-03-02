@@ -16,10 +16,10 @@
  *   limitations under the License.
  *
  */
-import * as PUPPET   from 'wechaty-puppet'
+import * as PUPPET   from 'wechaty-puppet-lab'
 import {
   FileBox,
-}                       from 'file-box'
+}                       from 'file-box-lab'
 
 import { PuppetWeChat } from '../src/mod.js'
 

@@ -26,7 +26,7 @@ import puppeteer  from 'puppeteer'
 
 import {
   MemoryCard,
-}                 from 'memory-card'
+}                 from 'memory-card-lab'
 
 // import {
 //   log,
